@@ -5,7 +5,7 @@ expenses, goals, and focus sessions into one dashboard — with a small
 recommendation engine that mines your own activity history for patterns,
 like *"you complete 80% of your tasks before 2 PM."*
 
-**[Live demo →](#)** *([add your Vercel URL here after deploying](https://life-os-lilac-rho.vercel.app))*
+**[Live demo →](#)** *([Here](https://life-os-lilac-rho.vercel.app))*
 **Sign up with any email — it's a sandboxed personal project, not a real service.**
 
 ---
