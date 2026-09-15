@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-line;
+  }
+  body {
+    background-image: radial-gradient(circle at 1px 1px, rgba(28, 35, 33, 0.05) 1px, transparent 0);
+    background-size: 22px 22px;
+  }
+  ::selection {
+    background: #e4c79a;
+    color: #1c2321;
+  }
+  :focus-visible {
+    outline: 2px solid #2f5d62;
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .stat-number {
+    font-family: var(--font-fraunces);
+    font-variant-numeric: tabular-nums;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+  }
+
+  .field {
+    @apply w-full bg-paper border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-soft/60 focus:border-teal transition-colors;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 bg-ink text-paper text-sm font-medium px-4 py-2 rounded hover:bg-teal transition-colors;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 text-sm font-medium px-4 py-2 rounded border border-line text-ink hover:border-ink transition-colors;
+  }
+
+  .panel {
+    @apply bg-paper border border-line rounded;
+  }
+}
