@@ -1,89 +1,161 @@
 # Life OS
 
-A personal command center: tasks, habits, notes, journal, expenses, goals, and
-focus sessions in one dashboard — plus a small recommendation engine that
-looks at your own history and surfaces things like "you complete 80% of your
-tasks before 2 PM."
+A personal command center that unifies tasks, habits, notes, a daily journal,
+expenses, goals, and focus sessions into one dashboard — with a small
+recommendation engine that mines your own activity history for patterns,
+like *"you complete 80% of your tasks before 2 PM."*
 
-## Why this isn't a separate Express server
+**[Live demo →](#)** *(add your Vercel URL here after deploying)*
+**Sign up with any email — it's a sandboxed personal project, not a real service.**
 
-You asked for MERN, deployable on Vercel. The most efficient way to do that
-today is **Next.js App Router**: the `src/app/api/**/route.js` files *are*
-your Express-equivalent backend (each one is a serverless function), React is
-the frontend, and Node is the runtime — all as one Vercel project with no
-separate server to manage, scale, or pay for. Mongo/Mongoose is unchanged.
-If you'd rather have a literal standalone Express server behind a separate
-`/api` folder for Vercel serverless functions, the models, Mongoose logic, and
-business logic in `src/lib` and `src/models` port over directly — only the
-route files would need to move from `route.js` handlers to Express routers.
+---
+
+## Why I built it
+
+I wanted a single project that touched the full stack end to end: schema
+design, auth, REST-style API design, serverless deployment constraints, data
+visualization, and — the part I found most interesting — turning raw
+behavioral data into something resembling an actual insight rather than just
+a dashboard of numbers.
+
+## What it demonstrates
+
+- **Full CRUD across 7 resources** (tasks, habits, notes, journal entries,
+  expenses, goals, focus sessions), each properly scoped so users can only
+  ever read or modify their own data.
+- **A real recommendation engine, not a gimmick.** `src/lib/insights.js` runs
+  independent pattern detectors — peak productivity window, best weekday,
+  habit consistency, focus-session trend, week-over-week spending shift —
+  using MongoDB aggregation queries against each user's own history. Every
+  detector has a minimum-data threshold, so a new account gets "not enough
+  history yet" instead of a claim invented from noise.
+- **Serverless-aware backend design.** MongoDB connections are cached across
+  invocations (`src/lib/db.js`) instead of reconnecting on every request,
+  which matters once you're running on Vercel's function model instead of a
+  long-lived Express process.
+- **A scheduled job, not just request/response.** A Vercel Cron trigger hits
+  `/api/cron/daily-insights` nightly and regenerates insights for every user,
+  authenticated with a shared secret so the endpoint can't be triggered
+  externally.
+- **Auth done properly.** Credentials hashed with bcrypt, JWT sessions via
+  NextAuth, every API route re-verifies the session server-side rather than
+  trusting the client.
+- **Deliberate, non-templated UI.** Custom design system instead of default
+  component-library styling.
 
 ## Stack
 
-- **Database:** MongoDB (Atlas) via Mongoose
-- **Backend:** Next.js Route Handlers (Node runtime), NextAuth (credentials + JWT)
-- **Frontend:** React 18, Tailwind CSS, Recharts
-- **Deployment:** Vercel, including Vercel Cron for nightly insight generation
+| Layer | Choice | Why |
+|---|---|---|
+| Database | MongoDB Atlas + Mongoose | Flexible schema for varied personal-data types; Atlas free tier is sufficient |
+| Backend | Next.js Route Handlers (Node runtime) | Serverless functions that deploy natively on Vercel — no separate Express server or hosting to manage |
+| Auth | NextAuth (Credentials provider + JWT) | Battle-tested session handling rather than hand-rolled auth |
+| Frontend | React 18, Tailwind CSS, Recharts | Fast iteration, utility-first styling, lightweight charting |
+| Hosting | Vercel | Zero-config deploys, built-in Cron Jobs, generous free tier |
 
-## Local setup
+This is the MERN stack adapted for how it's actually best deployed on Vercel
+today: Next.js's API routes replace a standalone Express server (each route
+file becomes its own serverless function), while MongoDB/Mongoose, React,
+and Node are unchanged. If you're evaluating this against a "classic" MERN
+project with a literal Express server, the reasoning for the swap — and how
+the code would need to change to go back to one — is in
+[*Architecture notes*](#architecture-notes) below.
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-2. Copy `.env.example` to `.env.local` and fill in:
-   - `MONGODB_URI` — a MongoDB Atlas connection string (free tier is fine:
-     https://www.mongodb.com/cloud/atlas). Create a database user, allow
-     network access from anywhere (or Vercel's IPs), and grab the connection
-     string.
-   - `NEXTAUTH_SECRET` — any long random string (`openssl rand -base64 32`).
-   - `NEXTAUTH_URL` — `http://localhost:3000` locally.
-   - `CRON_SECRET` — any random string; protects the nightly cron endpoint.
-3. Run it:
-   ```bash
-   npm run dev
-   ```
-4. Visit `http://localhost:3000`, create an account, and start using it.
+## The recommendation engine, in more detail
 
-## Deploying to Vercel
+Five independent detectors, each backed by a MongoDB aggregation or query,
+each gated by a minimum sample size so it doesn't hallucinate a pattern from
+three data points:
 
-1. Push this project to a GitHub repo.
-2. In Vercel, "Add New Project" → import the repo.
-3. Add the same environment variables from `.env.local` in the Vercel project
-   settings (Settings → Environment Variables). Set `NEXTAUTH_URL` to your
-   production URL (e.g. `https://your-app.vercel.app`).
-4. Deploy. `vercel.json` already declares a daily cron job that hits
-   `/api/cron/daily-insights` at 05:00 UTC — Vercel picks this up
-   automatically on Pro/Hobby plans that support Cron Jobs.
-5. That's it — no separate server, no Dockerfile, no process manager.
+| Detector | What it looks for |
+|---|---|
+| Peak completion window | Share of completed tasks before vs. after a cutoff hour (default 2 PM) |
+| Best weekday | Which day of the week has the highest share of completions |
+| Habit consistency | Most consistent and most-slipping habit over a rolling 30-day window |
+| Focus session trend | Whether average Pomodoro length is trending up or down |
+| Spending shift | The expense category with the largest week-over-week % change |
 
-## How the recommendation engine works
+Insights are computed two ways: on-demand (`GET /api/insights`, recomputed
+live whenever the dashboard loads) and nightly for every user in the
+database via the Cron-triggered batch job, which persists a snapshot so
+there's a running history over time.
 
-`src/lib/insights.js` runs a handful of independent pattern detectors against
-each user's own data using MongoDB aggregation/queries:
+## Screenshots
 
-- **Peak completion window** — what share of your completed tasks land before
-  vs. after a cutoff hour (default 2 PM). This is the "you complete 80% of
-  your tasks before 2 PM" insight.
-- **Best weekday** — which day of the week you finish the most tasks on.
-- **Habit consistency** — your most consistent and most-slipping habits over
-  the last ~30 days.
-- **Focus session trend** — whether your Pomodoro sessions are trending
-  longer or shorter.
-- **Spending shift** — the expense category with the biggest week-over-week
-  change.
+*(Add 2–3 screenshots here — the Overview dashboard with the insights panel
+is the strongest one to lead with, followed by the habit streak grid and the
+expenses breakdown.)*
 
-Each detector requires a minimum amount of data before it says anything (e.g.
-at least 8 completed tasks), so a brand-new account won't get insights
-invented from noise — it'll just say there isn't enough history yet.
+## Getting it running locally
 
-Insights are computed two ways:
-- **On demand:** `GET /api/insights` recomputes live whenever the dashboard
-  loads, and the "Refresh" button on the Overview page calls
-  `POST /api/insights` to save a snapshot.
-- **Nightly, for every user:** `GET /api/cron/daily-insights`, triggered by
-  Vercel Cron, loops over all users and stores a snapshot in the `Insight`
-  collection — so you have a running history of insights over time even if
-  no one opens the dashboard that day.
+### Prerequisites
+- Node.js 18.17+
+- A MongoDB database — [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) free tier, or a local instance
+
+### Setup
+
+```bash
+git clone https://github.com/yourusername/life-os.git
+cd life-os
+npm install
+cp .env.example .env.local
+```
+
+Fill in `.env.local`:
+
+```
+MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/lifeos
+NEXTAUTH_SECRET=<generate with: openssl rand -base64 32>
+NEXTAUTH_URL=http://localhost:3000
+CRON_SECRET=<any random string>
+```
+
+Then:
+
+```bash
+npm run dev
+```
+
+Visit `http://localhost:3000`, create an account, and start using it. The
+insights panel needs a bit of history (roughly 8+ completed tasks) before it
+has enough data to say anything.
+
+## Deploying your own copy
+
+1. Push to GitHub.
+2. Import the repo in [Vercel](https://vercel.com/new).
+3. Add the same four environment variables from `.env.local` in the Vercel
+   project's Settings → Environment Variables (set `NEXTAUTH_URL` to your
+   production URL).
+4. Deploy. `vercel.json` already declares the nightly Cron job — Vercel picks
+   it up automatically.
+
+## Architecture notes
+
+**Why Next.js instead of a standalone Express server:** the task was "MERN,
+deployable on Vercel." Vercel's model is serverless functions, not a
+long-running process — so a traditional `app.listen()` Express server
+doesn't map cleanly onto it. Next.js Route Handlers give you the same
+Express-shaped mental model (a file per route, functions per HTTP verb) while
+compiling naturally to Vercel's function runtime. If you wanted a literal
+separate Express server (for portability to non-Vercel hosting, for
+instance), the Mongoose models and business logic in `src/lib/insights.js`
+would port over directly — only the route files would need rewriting as
+Express routers instead of `route.js` exports.
+
+**Why a generic CRUD factory (`src/lib/crud.js`):** four of the seven
+resources (notes, journal, expenses, goals) are structurally identical —
+list/create/update/delete, scoped to the owning user. Rather than repeating
+that logic four times, a factory builds the handlers from the Mongoose model
+alone. Tasks and habits get bespoke handlers because they have real business
+logic (stamping `completedAt` on task completion; the habit-toggle endpoint
+and streak calculation).
+
+**Why habit logs are a separate collection from habits:** `HabitLog` stores
+one row per `(habit, date)` rather than an array field on the `Habit`
+document. This keeps documents small and bounded regardless of how long a
+habit has existed, and makes the insight engine's aggregation queries
+straightforward instead of requiring array unwinding.
 
 ## Project structure
 
@@ -92,43 +164,34 @@ src/
   app/
     page.js                 landing page
     login/, register/       auth pages
-    dashboard/               the app itself (layout + sidebar)
+    dashboard/               the app itself
       page.js                overview: stats, chart, insights panel
       tasks/ habits/ focus/ journal/ notes/ goals/ expenses/
-    api/                     all backend routes (Route Handlers)
+    api/                     backend — one folder per resource
       auth/                  NextAuth + registration
-      tasks/ habits/ notes/ journal/ expenses/ goals/ focus/
       insights/              on-demand recommendation engine endpoint
       cron/daily-insights/   nightly batch job for all users
-  components/                shared UI: Sidebar, InsightsPanel, PageHeader…
+  components/                Sidebar, InsightsPanel, PageHeader, EmptyState…
   lib/
     db.js                    cached Mongoose connection (serverless-safe)
     auth.js                  NextAuth config
     crud.js                  generic ownership-scoped CRUD handler factory
     insights.js              the recommendation engine
-    api.js                   tiny client-side fetch helpers
   models/                    Mongoose schemas
 ```
 
-## Notes on scope
+## What I'd build next
 
-This is a real, working foundation, not a mockup — auth, all CRUD, the charts,
-and the insight engine are fully implemented and build cleanly. A few things
-you'll likely want to add as you extend it:
+- Push/email notifications when a new high-confidence insight is generated
+  (schema and cron infrastructure are already in place — just needs a
+  delivery channel, e.g. Resend for email)
+- A settings page wired to the `User` model's already-present `timezone` and
+  `focusCutoffHour` fields, so the insight engine's cutoff hour is
+  user-configurable instead of hardcoded
+- Recurring tasks and habit reminders
+- Tests — currently none; would prioritize the insight engine's detectors
+  first since they're the most logic-dense part of the codebase
 
-- Push/email notifications (the schema and cron infrastructure are already
-  there — you'd add a notification channel, e.g. Resend for email or a
-  service worker for push, and call it from the cron job or from `insights.js`
-  when a new high-confidence insight is generated).
-- Recurring tasks/habits reminders.
-- A settings page (the `User` model already has `timezone` and
-  `focusCutoffHour` fields ready to be wired to a form and used by the
-  insight engine instead of the current hardcoded 2 PM cutoff).
+## License
 
-## A note on dependencies
-
-`npm audit` will show one remaining high-severity advisory nested inside
-Next.js's own bundled build-time PostCSS dependency. It only affects the
-build toolchain (not anything exposed by the deployed app) and is only fully
-resolved by moving to Next.js 16, which is a larger breaking upgrade. Keep an
-eye on `npm outdated` and upgrade when you're ready.
+MIT — feel free to fork and adapt.
